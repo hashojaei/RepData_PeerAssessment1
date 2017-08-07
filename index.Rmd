@@ -1,0 +1,134 @@
+---
+title: "Reproducible Research: Assessment 1"
+author: "HASS"
+date: "August 4, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load the libraries
+```{r, echo=TRUE}
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+```
+
+#download, unzip and read the file
+```{r}
+temp <- tempfile()
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip", temp)
+temp2 <- fread(unzip(temp))
+
+str(temp2)
+summary(temp2)
+```
+
+# What is mean total number of steps taken per day?
+## 1. Calculate the total number of steps taken per day
+```{r}
+
+temp3 <- temp2[, lapply(.SD, sum), .SDcols = 1, by = date]
+```
+
+## 2. Make a histogram of the total number of steps taken each day
+```{r}
+hist(temp3$steps,main="Histogram of total number of steps per day", 
+    xlab="Total number of steps in a day")
+```
+
+## 3. Calculate and report the mean and median of the total number of steps taken per day
+```{r}
+summary(temp3)
+```
+
+#What is the average daily activity pattern?
+## 1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r}
+# Data preparation for plot
+mean_steps_interval <- temp2[,  lapply(.SD, mean, na.rm =T), .SDcols = 1, by = interval]
+# create a time series plot 
+plot(mean_steps_interval$interval, mean_steps_interval$steps, type='l', 
+      main="Average number of steps over all days", xlab="Interval", 
+      ylab="Average number of steps")
+temp2[, .(Median_Total_Number= lapply(.SD, median)), .SDcols = 1, by = date]
+```
+
+## 2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r}
+max_row <- which.max(mean_steps_interval$steps) 
+mean_steps_interval[max_row]
+```
+
+
+#Imputing missing values
+## 1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+```{r}
+table(is.na(temp2))
+```
+
+## 2. Devise a strategy for filling in all of the missing values in the dataset. 
+```{r}
+
+imputed_temp <- copy(temp2)
+for (i in 1:nrow(imputed_temp)) {
+if (is.na(imputed_temp$steps[i])) {
+interval_value <- imputed_temp$interval[i]
+steps_value <- mean_steps_interval[mean_steps_interval$interval == interval_value, ]
+imputed_temp$steps[i] <- steps_value$steps
+}
+}
+```
+
+## 3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r}
+imputed_mean_steps_date <- imputed_temp[,  lapply(.SD, sum, na.rm =T), .SDcols = 1, by = date]
+
+```
+
+## 4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+```{r}
+hist(imputed_mean_steps_date$steps, main="Histogram of total number of steps per day (imputed)",xlab="Total number of steps in a day")
+
+# get mean of imputed data
+mean(imputed_mean_steps_date$steps)
+
+# get median of imputed date
+median(imputed_mean_steps_date$steps)
+
+
+# get mean of imputed data with NAs
+mean(temp3$steps, na.rm = T)
+
+
+# get median of imputed data with NAs
+median(temp3$steps, na.rm = T)
+```
+
+```{r}
+# create a and assin the days 
+imputed_mean_steps_date$days <- weekdays(as.Date(imputed_mean_steps_date$date))
+imputed_temp$days <- weekdays(as.Date(imputed_temp$date))
+```
+
+```{r}
+# create the two files of the weekdays and weekend
+ Weekend <- imputed_mean_steps_date[days %in% c("Saturday", "Sunday")]
+ Weekday <- imputed_mean_steps_date[!days %in% c("Saturday", "Sunday")]
+```
+
+```{r}
+temp4<-  aggregate(steps ~ interval + days, imputed_temp, mean)
+setDT(temp4)
+Weekdays<- temp4[!days %in% c("Saturday", "Sunday")]
+Weekends<- temp4[days %in% c("Saturday", "Sunday")]
+```
+
+```{r}
+p1 <-ggplot(Weekdays, aes( interval, steps))+ geom_line()+ ggtitle("Weekdays")
+p2 <-ggplot(Weekends, aes( interval, steps))+ geom_line()+ ggtitle("Weekends")
+grid.arrange(p1, p2)
+```
+
